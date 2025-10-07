@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tower Defense Básico (Protótipo)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Tower Defense Básico</h1>
+  <div id="info-painel" class="panel">
+    <span id="dinheiro">Dinheiro: $0</span>
+    <span id="vidas">Vidas: 0</span>
+    <span id="onda">Onda: 0</span>
+    <span id="evento"></span>
+  </div>
+  <div id="botoes-torres" class="toolbar">
+    <button id="btn-torre-basica">Torre Básica ($50)</button>
+    <button id="btn-torre-forte">Torre Forte ($120)</button>
+    <button id="btn-torre-gelo">Torre Gelo ($120)</button>
+    <button id="btn-torre-eletrica" disabled>Torre Elétrica ($120)</button>
+    <button id="btn-vender-torre" class="danger">Vender Torre</button>
+  </div>
+  <button id="btn-next-level" style="display:none" class="primary">Próximo Nível</button>
+
+  <!-- Menu inicial -->
+  <div id="main-menu" class="overlay center" data-layer="menu">
+    <div class="menu-box">
+      <h2>Tower Defense Básico</h2>
+      <p>Defenda o objetivo impedindo a chegada dos inimigos.</p>
+      <button id="btn-start" class="primary">Começar</button>
+      <button id="btn-continue" class="secondary">Continuar (debug)</button>
+      <button id="btn-open-levels" class="primary-alt">Selecionar Nível</button>
+      <div class="hint">Toque/clique no canvas para construir torres. Use 'Vender Torre'.</div>
+    </div>
+  </div>
+
+  <!-- Seletor de níveis -->
+  <div id="level-selector" class="level-selector-modal" role="dialog" aria-modal="true" aria-labelledby="level-selector-title">
+    <div class="level-selector-content">
+      <h3 id="level-selector-title">Selecionar Nível</h3>
+      <p class="subtitle">Escolha um nível para jogar. Progresso salvo localmente.</p>
+      <div class="level-grid" id="level-grid"></div>
+      <div class="actions">
+        <button id="btn-close-levels" class="secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay de vitória -->
+  <div id="victory-overlay" class="overlay center" style="display:none">
+    <div class="victory-box">
+      <h2 id="victory-title">Nível Completo!</h2>
+      <p id="victory-msg">Parabéns — você completou o nível.</p>
+      <div class="actions">
+        <button id="victory-continue" class="primary">Continuar</button>
+        <button id="victory-close" class="secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tooltip" class="tooltip" style="display:none"></div>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <script type="module" src="game.js"></script>
+</body>
+</html>

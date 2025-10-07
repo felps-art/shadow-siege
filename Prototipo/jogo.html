@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower Defense Básico</title>
+    <style>
+        body {
+            background-color: #333;
+            color: #eee;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #4CAF50;
+        }
+        canvas {
+            background-color: #006400; /* Verde escuro para o gramado */
+            border: 3px solid #4CAF50;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #info-painel {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            max-width: 800px;
+            padding: 10px;
+            background-color: #222;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        #botoes-torres {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            justify-content: space-around;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        #botoes-torres button {
+            padding: 10px 14px;
+            font-size: 1rem;
+            border-radius: 6px;
+            min-width: 120px;
+        }
+        /* Canvas responsive: keep internal resolution but scale to fit width */
+        canvas {
+            max-width: 100%;
+            height: auto;
+            touch-action: none; /* prevent default gestures interfering */
+        }
+
+        /* Tooltip hidden on small touch devices */
+        @media (max-width: 600px) {
+            #info-painel { flex-direction: column; gap: 8px; align-items: stretch; }
+            #botoes-torres { flex-direction: column; align-items: stretch; }
+            #botoes-torres button { width: 100%; min-width: unset; }
+            #tooltip { display: none !important; }
+            body { padding: 10px; }
+        }
+        /* Level selector modal */
+        .level-selector-modal {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.65);
+            z-index: 4000;
+            padding: 20px;
+        }
+        .level-selector-content {
+            background: #0f1724;
+            color: #fff;
+            border-radius: 10px;
+            padding: 18px;
+            max-width: 960px;
+            width: 100%;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+        }
+        .level-selector-content h3 { margin-top: 0; margin-bottom: 8px; }
+        .level-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+        .level-card {
+            background: linear-gradient(180deg,#111827,#0b1220);
+            border: 1px solid rgba(255,255,255,0.04);
+            color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            position: relative;
+            min-height: 64px;
+        }
+        .level-card[disabled] { opacity: 0.45; cursor: not-allowed; }
+        .level-card .thumb {
+            width: 56px; height: 44px; background: rgba(255,255,255,0.03); border-radius: 6px; display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff
+        }
+        .level-card .lvl-name { font-size: 0.95rem; }
+        .level-card .meta { font-size: 0.8rem; color: #a8b3c7 }
+        .locked-overlay {
+            position: absolute; right: 8px; top: 8px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 999px; font-size:0.8rem; color:#ffdede
+        }
+        #btn-open-levels { margin:8px; }
+    </style>
+</head>
+<body>
+
+    <h1>Tower Defense Básico</h1>
+    <div id="info-painel">
+        <span id="dinheiro">Dinheiro: $100</span>
+        <span id="vidas">Vidas: 20</span>
+        <span id="onda">Onda: 0</span>
+        <span id="evento"></span>
+    </div>
+    <div id="botoes-torres">
+        <button id="btn-torre-basica">Torre Básica ($50)</button>
+        <button id="btn-torre-forte">Torre Forte ($120)</button>
+        <button id="btn-torre-gelo">Torre Gelo ($120)</button>
+        <button id="btn-torre-eletrica" disabled style="background:transparent;color:#ddd;border:1px solid rgba(255,255,255,0.04);">Torre Elétrica ($120)</button>
+        <button id="btn-vender-torre" style="background:#444;color:#fff;">Vender Torre</button>
+    </div>
+    <button id="btn-next-level" style="display:none; margin-top:10px; padding:10px 14px; border-radius:6px; background:#2563eb; color:#fff; border:none;">Próximo Nível</button>
+    <!-- Tela de menu inicial (overlay) -->
+    <div id="main-menu" style="position:fixed;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);z-index:3000">
+        <div style="background:#111;padding:24px;border-radius:8px;text-align:center;color:#fff;max-width:90%;width:420px">
+            <h2 style="margin-top:0">Tower Defense Básico</h2>
+            <p>Defenda as arenas e não deixe Nêgo Rei chegar ao objetivo.</p>
+            <button id="btn-start" style="padding:10px 16px;background:#16a34a;border-radius:6px;border:none;color:#fff;font-size:1rem;margin:8px">Começar</button>
+            <button id="btn-continue" style="padding:10px 16px;background:#6b7280;border-radius:6px;border:none;color:#fff;font-size:1rem;margin:8px">Continuar (debug)</button>
+            <button id="btn-open-levels" style="padding:10px 16px;background:#2563eb;border-radius:6px;border:none;color:#fff;font-size:1rem;margin:8px">Selecionar Nível</button>
+            <div style="margin-top:12px;font-size:0.9em;color:#ddd">Toque/clique no canvas para construir torres. Use o botão 'Vender Torre' para remover.</div>
+        </div>
+    </div>
+        <!-- Level selector modal -->
+    <div id="level-selector" class="level-selector-modal" role="dialog" aria-modal="true" aria-labelledby="level-selector-title">
+        <div class="level-selector-content">
+            <h3 id="level-selector-title">Selecionar Nível</h3>
+            <p style="margin-top:0.2rem;color:#cbd5e1">Escolha um nível para jogar. Níveis não desbloqueados aparecem bloqueados. O progresso é salvo localmente.</p>
+            <div class="level-grid" id="level-grid"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+                <button id="btn-close-levels" style="padding:8px 12px;border-radius:6px;border:none;background:#6b7280;color:#fff">Fechar</button>
+            </div>
+        </div>
+    </div>
+    <!-- Victory overlay shown between levels -->
+    <div id="victory-overlay" style="display:none; position:fixed; left:0; top:0; width:100%; height:100%; align-items:center; justify-content:center; background:rgba(0,0,0,0.78); z-index:4500;">
+        <div style="background:#071124; color:#fff; padding:20px; border-radius:10px; max-width:520px; width:92%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.6);">
+            <h2 id="victory-title" style="margin:0 0 8px 0;">Nível Completo!</h2>
+            <p id="victory-msg" style="color:#cbd5e1; margin:0 0 14px 0;">Parabéns — você completou o nível.</p>
+            <div style="display:flex;gap:10px;justify-content:center;">
+                <button id="victory-continue" style="padding:10px 14px;background:#16a34a;border-radius:6px;border:none;color:#fff;font-size:1rem;">Continuar</button>
+                <button id="victory-close" style="padding:10px 14px;background:#6b7280;border-radius:6px;border:none;color:#fff;font-size:1rem;">Fechar</button>
+            </div>
+        </div>
+    </div>
+    <!-- Tooltip para mostrar estatísticas das torres -->
+    <div id="tooltip" style="position: absolute; background: rgba(0,0,0,0.85); color: #fff; padding:8px 10px; border-radius:6px; font-size:0.95em; display:none; pointer-events:none; z-index:1000;"></div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        // --- CONFIGURAÇÃO INICIAL ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const dinheiroEl = document.getElementById('dinheiro');
+        const vidasEl = document.getElementById('vidas');
+        const ondaEl = document.getElementById('onda');
+
+        // --- ESTADO DO JOGO ---
+        let dinheiro = 200;
+        let vidas = 20;
+        let numeroOnda = 0;
+        let inimigosAtivos = 0;
+        let jogoAcabou = false;
+    let gameStarted = false; // menu blocks the game until true
+
+    const precoTorre = 50;
+    const precoTorreForte = 120;
+    // Multiplicador global de recompensa em dinheiro por inimigo morto
+    const REWARD_MULT = 2; // Aumente este valor para ganhar mais dinheiro (ex: 3, 4...)
+
+    let tipoTorreSelecionada = 'basica'; // 'basica' | 'forte' | 'gelo'
+    let sellMode = false;
+    // Pending build state for mobile confirmation flow
+    let pendingBuild = null; // { x, y, tipo, custo }
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0);
+
+        // --- CAMINHO DOS INIMIGOS ---
+        // Coordenadas (x, y) que definem o caminho
+        const caminho = [
+            { x: 0, y: 100 },
+            { x: 250, y: 100 },
+            { x: 250, y: 400 },
+            { x: 550, y: 400 },
+            { x: 550, y: 200 },
+            { x: 800, y: 200 }
+        ];
+
+            // LEVEL SYSTEM
+            const levels = [
+                {
+                    name: 'Nivel 1 - Campo',
+                    caminho: [
+                        { x: 0, y: 100 },
+                        { x: 250, y: 100 },
+                        { x: 250, y: 400 },
+                        { x: 550, y: 400 },
+                        { x: 550, y: 200 },
+                        { x: 800, y: 200 }
+                    ],
+                    startingMoney: 200,
+                    maxWaves: 5
+                },
+                {
+                    name: 'Nivel 2 - Desfiladeiro',
+                    caminho: [
+                        { x: 0, y: 300 },
+                        { x: 200, y: 300 },
+                        { x: 200, y: 150 },
+                        { x: 450, y: 150 },
+                        { x: 450, y: 450 },
+                        { x: 800, y: 450 }
+                    ],
+                    startingMoney: 250,
+                    maxWaves: 6
+                }
+            ];
+            let currentLevelIndex = 0;
+            let wavesLaunchedThisLevel = 0;
+
+            function loadLevel(index) {
+                if (index < 0 || index >= levels.length) return;
+                currentLevelIndex = index;
+                const lvl = levels[index];
+                // replace caminho
+                caminho.length = 0;
+                for (const p of lvl.caminho) caminho.push({ x: p.x, y: p.y });
+                // reset state
+                torres.length = 0;
+                inimigos.length = 0;
+                projeteis.length = 0;
+                particles.length = 0;
+                numeroOnda = 0;
+                inimigosAtivos = 0;
+                wavesLaunchedThisLevel = 0;
+                dinheiro = lvl.startingMoney;
+                vidas = 20;
+                jogoAcabou = false;
+                bossAlive = false;
+                atualizarUI();
+                // Habilita torre elétrica apenas a partir do segundo nível (index >= 1)
+                try {
+                    if (btnTorreEletrica) {
+                        btnTorreEletrica.disabled = !(index >= 1);
+                        btnTorreEletrica.style.opacity = btnTorreEletrica.disabled ? '0.5' : '1';
+                    }
+                } catch (e) { }
+            }
+
+        // --- ARRAYS PARA OBJETOS DO JOGO ---
+        const torres = [];
+        const inimigos = [];
+        const projeteis = [];
+
+        // --- CLASSES DO JOGO ---
+
+        // Classe para as Torres
+        class Torre {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.alcance = 120;
+                this.dano = 100;
+                this.taxaDisparo = 80; // frames por disparo
+                this.cooldown = 0;
+                this.price = precoTorre;
+            }
+
+            draw() {
+                // Torre com gradiente
+                const g = ctx.createLinearGradient(this.x - 15, this.y - 15, this.x + 15, this.y + 15);
+                g.addColorStop(0, '#3b82f6');
+                g.addColorStop(1, '#1e3a8a');
+                ctx.fillStyle = g;
+                ctx.shadowColor = 'rgba(0,0,0,0.4)';
+                ctx.shadowBlur = 6;
+                ctx.fillRect(this.x - 15, this.y - 15, 30, 30);
+                ctx.shadowBlur = 0;
+                // Desenha o alcance suave
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.alcance, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(30,58,138,0.06)';
+                ctx.fill();
+            }
+
+            encontrarAlvo() {
+                for (const inimigo of inimigos) {
+                    const distanciaX = this.x - inimigo.x;
+                    const distanciaY = this.y - inimigo.y;
+                    const distancia = Math.sqrt(distanciaX * distanciaX + distanciaY * distanciaY);
+                    if (distancia < this.alcance) {
+                        return inimigo;
+                    }
+                }
+                return null;
+            }
+
+            update() {
+                if (this.cooldown > 0) {
+                    this.cooldown--;
+                }
+                const alvo = this.encontrarAlvo();
+                if (alvo && this.cooldown === 0) {
+                    projeteis.push(new Projetil(this.x, this.y, alvo, this.dano));
+                    this.cooldown = this.taxaDisparo;
+                }
+                this.draw();
+            }
+        }
+
+        // Torre mais forte: mais cara, mais dano, alcance similar ou maior
+        class TorreForte extends Torre {
+            constructor(x, y) {
+                super(x, y);
+                this.alcance = 150;
+                this.dano = 250;
+                this.taxaDisparo = 100; // dispara um pouco mais devagar
+                this.price = precoTorreForte;
+            }
+
+            draw() {
+                const g = ctx.createLinearGradient(this.x - 18, this.y - 18, this.x + 18, this.y + 18);
+                g.addColorStop(0, '#8b5cf6');
+                g.addColorStop(1, '#4c1d95');
+                ctx.fillStyle = g;
+                ctx.shadowColor = 'rgba(0,0,0,0.45)';
+                ctx.shadowBlur = 8;
+                ctx.fillRect(this.x - 18, this.y - 18, 36, 36);
+                ctx.shadowBlur = 0;
+                // Alcance sutil
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.alcance, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(76,29,149,0.06)';
+                ctx.fill();
+            }
+        }
+
+        // Torre de Gelo: aplica lentidão ao atingir
+        class TorreGelo extends Torre {
+            constructor(x, y) {
+                super(x, y);
+                this.alcance = 130;
+                this.dano = 100; // mesmo dano que a torre básica
+                this.taxaDisparo = 90;
+                this.price = precoTorreForte;
+            }
+
+            draw() {
+                const g = ctx.createLinearGradient(this.x - 16, this.y - 16, this.x + 16, this.y + 16);
+                g.addColorStop(0, '#7dd3fc');
+                g.addColorStop(1, '#0369a1');
+                ctx.fillStyle = g;
+                ctx.shadowColor = 'rgba(3,105,161,0.45)';
+                ctx.shadowBlur = 8;
+                ctx.fillRect(this.x - 16, this.y - 16, 32, 32);
+                ctx.shadowBlur = 0;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.alcance, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(125,206,240,0.08)';
+                ctx.fill();
+            }
+
+            update() {
+                if (this.cooldown > 0) this.cooldown--;
+                const alvo = this.encontrarAlvo();
+                if (alvo && this.cooldown === 0) {
+                    const p = new Projetil(this.x, this.y, alvo, this.dano);
+                    p.slowAmount = 0.5; // reduz 50% da velocidade
+                    p.slowDuration = 240; // duração em frames (~4s a 60fps)
+                    projeteis.push(p);
+                    this.cooldown = this.taxaDisparo;
+                }
+                this.draw();
+            }
+        }
+
+        // Torre Elétrica: atira em até 3 alvos simultaneamente (projéteis simples)
+        class TorreEletrica extends Torre {
+            constructor(x, y) {
+                super(x, y);
+                this.alcance = 140;
+                this.dano = 100; // mesmo dano que a torre básica
+                this.taxaDisparo = 120; // disparos mais lentos
+                this.price = precoTorreForte;
+            }
+
+            encontrarAlvos(maxTargets = 3) {
+                // encontra os inimigos mais próximos dentro do alcance, até maxTargets
+                const encontrados = [];
+                for (const inimigo of inimigos) {
+                    const dx = inimigo.x - this.x;
+                    const dy = inimigo.y - this.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist <= this.alcance) {
+                        encontrados.push({ inimigo, dist });
+                    }
+                }
+                encontrados.sort((a,b) => a.dist - b.dist);
+                return encontrados.slice(0, maxTargets).map(r => r.inimigo);
+            }
+
+            update() {
+                if (this.cooldown > 0) this.cooldown--;
+                const alvos = this.encontrarAlvos(3);
+                if (alvos.length > 0 && this.cooldown === 0) {
+                    for (const alvo of alvos) {
+                        projeteis.push(new Projetil(this.x, this.y, alvo, this.dano));
+                    }
+                    this.cooldown = this.taxaDisparo;
+                }
+                // draw as a lightning tower (simple visual)
+                const g = ctx.createLinearGradient(this.x - 18, this.y - 18, this.x + 18, this.y + 18);
+                g.addColorStop(0, '#f97316');
+                g.addColorStop(1, '#f59e0b');
+                ctx.fillStyle = g;
+                ctx.shadowColor = 'rgba(249,115,22,0.4)';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.moveTo(this.x - 10, this.y - 14);
+                ctx.lineTo(this.x + 12, this.y - 2);
+                ctx.lineTo(this.x - 4, this.y + 14);
+                ctx.lineTo(this.x + 10, this.y + 14);
+                ctx.lineTo(this.x - 6, this.y - 2);
+                ctx.lineTo(this.x + 8, this.y - 14);
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                // alcance
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.alcance, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(255,255,200,0.02)';
+                ctx.fill();
+            }
+        }
+
+        // Classe para os Inimigos (suporta tipos: 'normal'|'forte'|'gelo')
+        class Inimigo {
+            constructor(vida, velocidade, tipo = 'normal') {
+                this.x = caminho[0].x;
+                this.y = caminho[0].y;
+                this.pontoCaminhoIndex = 0;
+                this.velocidade = velocidade;
+                this.tipo = tipo; // 'normal' | 'forte' | 'gelo' | 'boss'
+                if (this.tipo === 'boss') {
+                    // boss: vida 20x do valor base passado
+                    this.vidaMaxima = vida * 100;
+                } else {
+                    this.vidaMaxima = vida;
+                }
+                this.vida = this.vidaMaxima;
+                this.raio = 10;
+                // Definição de recompensa base por tipo + multiplicador global
+                // Normal
+                let recompensaBase = 5;
+                if (this.tipo === 'gelo') {
+                    this.raio = 12;
+                    recompensaBase = Math.max(3, Math.floor(this.vidaMaxima / 30));
+                } else if (this.tipo === 'forte') {
+                    this.raio = 14;
+                    recompensaBase = Math.max(8, Math.floor(this.vidaMaxima / 50));
+                } else if (this.tipo === 'boss') {
+                    this.raio = 26;
+                    recompensaBase = Math.max(50, Math.floor(this.vidaMaxima / 50));
+                }
+                this.recompensa = recompensaBase * REWARD_MULT;
+            }
+
+            draw() {
+                // Corpo do inimigo com gradiente e borda
+                let outer = '#FF0000';
+                let inner = '#ff7b7b';
+                if (this.tipo === 'gelo') {
+                    outer = '#7ec8ff'; inner = '#cfeeff';
+                } else if (this.tipo === 'forte') {
+                    outer = '#7f0000'; inner = '#ffb3b3';
+                }
+                const g = ctx.createRadialGradient(this.x - this.raio/3, this.y - this.raio/3, 1, this.x, this.y, this.raio);
+                g.addColorStop(0, inner);
+                g.addColorStop(1, outer);
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.raio, 0, Math.PI * 2);
+                ctx.fill();
+                // Borda
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Se for boss, desenha legenda nome
+                if (this.tipo === 'boss') {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Nêgo Rei', this.x, this.y - this.raio - 12);
+                }
+
+                // Barra de vida
+                const percentualVida = this.vida / this.vidaMaxima;
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(this.x - this.raio, this.y - this.raio - 10, this.raio * 2, 5);
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(this.x - this.raio, this.y - this.raio - 10, this.raio * 2 * percentualVida, 5);
+            }
+
+            update() {
+                // Gerencia efeitos de slow (se houver) -- inimigos 'gelo' são imunes
+                if (this.tipo !== 'gelo' && this._slow && this._slow.remaining > 0) {
+                    this._slow.remaining--;
+                    if (this._slow.remaining === 0) {
+                        // Restaura velocidade original
+                        this.velocidade = this._slow.originalVelocidade;
+                        delete this._slow;
+                    }
+                }
+
+                if (this.pontoCaminhoIndex < caminho.length - 1) {
+                    const pontoDestino = caminho[this.pontoCaminhoIndex + 1];
+                    const angulo = Math.atan2(pontoDestino.y - this.y, pontoDestino.x - this.x);
+                    this.x += Math.cos(angulo) * this.velocidade;
+                    this.y += Math.sin(angulo) * this.velocidade;
+
+                    const distanciaX = this.x - pontoDestino.x;
+                    const distanciaY = this.y - pontoDestino.y;
+                    if (distanciaX * distanciaX + distanciaY * distanciaY < this.velocidade * this.velocidade) {
+                        this.pontoCaminhoIndex++;
+                    }
+                } else {
+                    // Inimigo chegou ao final
+                    if (this.tipo === 'boss') {
+                        // Se o boss chega ao fim, encerra imediatamente o jogo
+                        jogoAcabou = true;
+                        if (eventoEl) eventoEl.textContent = 'Nêgo Rei wins — FIM DE JOGO';
+                    } else {
+                        vidas--;
+                        removerInimigo(this);
+                    }
+                }
+                this.draw();
+            }
+        }
+
+        // Classe para os Projéteis
+        class Projetil {
+            constructor(x, y, alvo, dano) {
+                this.x = x;
+                this.y = y;
+                this.alvo = alvo;
+                this.velocidade = 5;
+                this.dano = dano;
+                // Efeitos opcionais
+                this.slowAmount = 0; // fração (ex: 0.5 = reduz 50%)
+                this.slowDuration = 0; // duração em frames
+                this.raio = 3;
+            }
+
+            draw() {
+                // Cores por tipo (gelo vs normal)
+                if (this.slowAmount > 0) {
+                    ctx.fillStyle = '#bde6ff'; // azul gelo
+                    ctx.shadowColor = '#7dd3fc';
+                } else if (this.dano >= 200) {
+                    ctx.fillStyle = '#ffd27f'; // amarelo forte
+                    ctx.shadowColor = '#ffb84d';
+                } else {
+                    ctx.fillStyle = '#fff176'; // amarelo
+                    ctx.shadowColor = '#ffd54f';
+                }
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.raio, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            update() {
+                const angulo = Math.atan2(this.alvo.y - this.y, this.alvo.x - this.x);
+                this.x += Math.cos(angulo) * this.velocidade;
+                this.y += Math.sin(angulo) * this.velocidade;
+
+                const distanciaX = this.x - this.alvo.x;
+                const distanciaY = this.y - this.alvo.y;
+                if (distanciaX * distanciaX + distanciaY * distanciaY < this.alvo.raio * this.alvo.raio) {
+                    // Calcula dano aplicado (inimigos 'gelo' recebem metade do dano de projeteis de gelo)
+                    let danoAplicado = this.dano;
+                    const ehProjGelo = this.slowAmount > 0 && this.slowDuration > 0;
+                    if (ehProjGelo && this.alvo.tipo === 'gelo') {
+                        danoAplicado = Math.ceil(danoAplicado / 2);
+                    }
+                    this.alvo.vida -= danoAplicado;
+                    if (ehProjGelo) {
+                        aplicarSlow(this.alvo, this.slowAmount, this.slowDuration);
+                    }
+                    // Spawn partículas no impacto
+                    const cor = ehProjGelo ? '#aeeeff' : (this.dano >= 200 ? '#ffd27f' : '#fff176');
+                    spawnParticles(this.x, this.y, cor, 8);
+                    return true; // Atingiu o alvo
+                }
+                return false; // Ainda não atingiu
+            }
+        }
+
+        // Sistema simples de partículas
+        const particles = [];
+        function spawnParticles(x, y, color, count = 6) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 3,
+                    vy: (Math.random() - 0.5) * 3,
+                    life: 20 + Math.random() * 20,
+                    color: color,
+                    size: 1 + Math.random() * 2
+                });
+            }
+        }
+
+        // Aplica slow ao inimigo: reduz velocidade por determinado número de frames
+        function aplicarSlow(inimigo, slowAmount, slowDuration) {
+            if (!inimigo._slow) {
+                inimigo._slow = { originalVelocidade: inimigo.velocidade, remaining: 0 };
+            }
+            // Calcula nova velocidade alvo (não aumenta velocidade)
+            const novoVel = inimigo._slow.originalVelocidade * (1 - slowAmount);
+            inimigo.velocidade = Math.min(inimigo.velocidade, novoVel);
+            inimigo._slow.remaining = Math.max(inimigo._slow.remaining, slowDuration);
+        }
+
+        // --- FUNÇÕES AUXILIARES ---
+
+        function removerInimigo(inimigo) {
+            const index = inimigos.indexOf(inimigo);
+            if (index > -1) {
+                inimigos.splice(index, 1);
+                inimigosAtivos--;
+            }
+        }
+        
+        function desenharCaminho() {
+            // Desenha base do caminho
+            ctx.strokeStyle = '#8B5A2B'; // marrom
+            ctx.lineWidth = 40;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(caminho[0].x, caminho[0].y);
+            for (let i = 1; i < caminho.length; i++) ctx.lineTo(caminho[i].x, caminho[i].y);
+            ctx.stroke();
+            // Textura: linha tracejada mais clara no meio
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            ctx.lineWidth = 6;
+            ctx.setLineDash([15, 12]);
+            ctx.beginPath();
+            ctx.moveTo(caminho[0].x, caminho[0].y);
+            for (let i = 1; i < caminho.length; i++) ctx.lineTo(caminho[i].x, caminho[i].y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.lineWidth = 1; // Reset
+        }
+
+        function atualizarUI() {
+            dinheiroEl.textContent = `Dinheiro: $${dinheiro}`;
+            vidasEl.textContent = `Vidas: ${vidas}`;
+            ondaEl.textContent = `Onda: ${numeroOnda}`;
+        }
+        
+        function criarOnda() {
+            const lvl = levels[currentLevelIndex];
+            if (!lvl) return;
+            // Don't create more waves than allowed for this level
+            if (wavesLaunchedThisLevel >= lvl.maxWaves) return;
+            numeroOnda++;
+            wavesLaunchedThisLevel++;
+            // Base de inimigos por onda
+            inimigosAtivos = numeroOnda * 5; // 5 inimigos na onda 1, 10 na 2, etc.
+
+            // Boss spawn interval
+            const bossSpawnInterval = 5; // spawna um boss a cada 5 ondas
+            const shouldSpawnBoss = (numeroOnda % bossSpawnInterval === 0);
+            if (shouldSpawnBoss) {
+                // cria boss no início do caminho
+                const vidaBase = 50 + numeroOnda * 10;
+                const velocidadeBoss = 0.6;
+                const boss = new Inimigo(vidaBase, velocidadeBoss, 'boss');
+                boss.x = caminho[0].x - 30;
+                boss.y = caminho[0].y;
+                inimigos.push(boss);
+                inimigosAtivos++;
+                bossAlive = true;
+                if (eventoEl) eventoEl.textContent = 'CHEFE: Nêgo Rei apareceu!';
+            }
+
+            for (let i = 0; i < inimigosAtivos; i++) {
+                setTimeout(() => {
+                    // Raramente spawnar inimigo forte: por exemplo 1 a cada 10 inimigos nas ondas iniciais
+                    const probForte = 0.06; // 6% de chance por inimigo
+                    const probGelo = Math.min(0.15, 0.02 + numeroOnda * 0.01); // aumenta com a onda
+
+                    const isForte = Math.random() < probForte;
+                    const isGelo = !isForte && (Math.random() < probGelo);
+
+                    if (isForte) {
+                        const vida = (50 + numeroOnda * 20) * 3; // triplica vida
+                        const velocidade = 0.9 + numeroOnda * 0.02; // um pouco mais lento que normal
+                        inimigos.push(new Inimigo(vida, velocidade, 'forte'));
+                    } else if (isGelo) {
+                        const vida = (50 + numeroOnda * 20) * 2; // dobro de vida
+                        const velocidade = Math.max(0.4, 0.8 - numeroOnda * 0.02); // mais lento
+                        inimigos.push(new Inimigo(vida, velocidade, 'gelo'));
+                    } else {
+                        const vida = 50 + numeroOnda * 20;
+                        const velocidade = 1 + numeroOnda * 0.1;
+                        inimigos.push(new Inimigo(vida, velocidade, 'normal'));
+                    }
+                }, i * 800); // Espaçamento entre inimigos
+            }
+        }
+
+        function verificarClique(event) {
+            if (jogoAcabou) return;
+            if (!gameStarted) return; // ignore clicks until game started via menu
+
+            const rect = canvas.getBoundingClientRect();
+            // Mapear coordenadas do evento (client) para coordenadas internas do canvas,
+            // considerando que o canvas pode estar escalado via CSS (responsive)
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (event.clientX - rect.left) * scaleX;
+            const y = (event.clientY - rect.top) * scaleY;
+
+            // Se estivermos em modo venda, tenta vender torre clicada
+            if (sellMode) {
+                // encontra torre próxima
+                for (let i = 0; i < torres.length; i++) {
+                    const t = torres[i];
+                    const dx = t.x - x;
+                    const dy = t.y - y;
+                    if (dx * dx + dy * dy < 25 * 25) { // dentro de 25px
+                        const refund = Math.floor((t.price || precoTorre) * 0.5);
+                        dinheiro += refund;
+                        torres.splice(i, 1);
+                        sellMode = false; // volta ao modo normal
+                        atualizarSelecaoBotao();
+                        return;
+                    }
+                }
+                return; // nada vendido
+            }
+
+            // Decide tipo de torre a ser construída e custo
+            const custo = (tipoTorreSelecionada === 'forte' || tipoTorreSelecionada === 'gelo' || tipoTorreSelecionada === 'eletrica') ? precoTorreForte : precoTorre;
+
+            if (dinheiro >= custo) {
+                // Simplificação: Verifica se não está clicando no caminho
+                // Uma verificação mais robusta seria necessária para um jogo complexo
+                if (y > 120 && y < 380 && x > 270 && x < 530) {
+                     // Área inválida de exemplo
+                } else {
+                    dinheiro -= custo;
+                    if (tipoTorreSelecionada === 'forte') {
+                        torres.push(new TorreForte(x, y));
+                    } else if (tipoTorreSelecionada === 'gelo') {
+                        torres.push(new TorreGelo(x, y));
+                    } else if (tipoTorreSelecionada === 'eletrica') {
+                        torres.push(new TorreEletrica(x, y));
+                    } else {
+                        torres.push(new Torre(x, y));
+                    }
+                }
+            } else {
+                console.log("Dinheiro insuficiente!");
+            }
+        }
+    canvas.addEventListener('click', verificarClique);
+        // Touch support: on touch devices we use a confirmation flow to avoid accidental builds.
+        canvas.addEventListener('touchstart', function (e) {
+            if (!e.touches || e.touches.length === 0) return;
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (touch.clientX - rect.left) * scaleX;
+            const y = (touch.clientY - rect.top) * scaleY;
+
+            // If we're in sell mode, try to sell immediately (no confirmation required)
+            if (sellMode) {
+                for (let i = 0; i < torres.length; i++) {
+                    const t = torres[i];
+                    const dx = t.x - x;
+                    const dy = t.y - y;
+                    if (dx * dx + dy * dy < 25 * 25) {
+                        const refund = Math.floor((t.price || precoTorre) * 0.5);
+                        dinheiro += refund;
+                        torres.splice(i, 1);
+                        sellMode = false;
+                        atualizarSelecaoBotao();
+                        removeConfirmOverlay();
+                        return;
+                    }
+                }
+                removeConfirmOverlay();
+                return;
+            }
+
+            // If the device has touch, instead of building immediately we create a pending build
+            // and ask the user to confirm (avoid accidental taps). Desktop clicks still build immediately.
+            if (isTouchDevice) {
+                // Decide cost
+                const custo = (tipoTorreSelecionada === 'forte' || tipoTorreSelecionada === 'gelo' || tipoTorreSelecionada === 'eletrica') ? precoTorreForte : precoTorre;
+                // Validate simple invalid area as in verificarClique
+                if (y > 120 && y < 380 && x > 270 && x < 530) {
+                    // invalid build area: ignore
+                    removeConfirmOverlay();
+                } else if (dinheiro < custo) {
+                    // Not enough money - show a quick overlay that disappears
+                    showTemporaryMessage('Dinheiro insuficiente!', touch.clientX, touch.clientY);
+                } else {
+                    pendingBuild = { x, y, tipo: tipoTorreSelecionada, custo };
+                    showConfirmOverlay(touch.clientX, touch.clientY, pendingBuild);
+                }
+                e.preventDefault();
+                return;
+            }
+
+            // Fallback: if not touch device, forward to click handler for normal behavior
+            const fakeEvent = { clientX: touch.clientX, clientY: touch.clientY };
+            // forward only if game has started
+            if (gameStarted) verificarClique(fakeEvent);
+            e.preventDefault();
+        }, { passive: false });
+
+        // Overlay helpers for mobile confirmation
+        function showConfirmOverlay(clientX, clientY, pending) {
+            removeConfirmOverlay();
+            const overlay = document.createElement('div');
+            overlay.id = 'build-confirm-overlay';
+            overlay.style.position = 'absolute';
+            overlay.style.zIndex = 2000;
+            overlay.style.transform = 'translate(-50%, -10px)';
+            overlay.style.left = clientX + 'px';
+            overlay.style.top = (clientY + 20) + 'px';
+            overlay.style.background = 'rgba(0,0,0,0.85)';
+            overlay.style.color = '#fff';
+            overlay.style.padding = '8px 10px';
+            overlay.style.borderRadius = '8px';
+            overlay.style.display = 'flex';
+            overlay.style.gap = '8px';
+            overlay.style.alignItems = 'center';
+
+            const info = document.createElement('div');
+            info.style.fontSize = '14px';
+            info.innerHTML = `<strong>${pending.tipo === 'basica' ? 'Torre Básica' : (pending.tipo === 'forte' ? 'Torre Forte' : 'Torre Gelo')}</strong><br>Preço: $${pending.custo}`;
+
+            const btnConfirm = document.createElement('button');
+            btnConfirm.textContent = 'Confirmar';
+            btnConfirm.style.padding = '6px 10px';
+            btnConfirm.style.borderRadius = '6px';
+            btnConfirm.style.border = 'none';
+            btnConfirm.style.background = '#16a34a';
+            btnConfirm.style.color = '#fff';
+            btnConfirm.addEventListener('click', () => {
+                confirmPendingBuild();
+            });
+
+            const btnCancel = document.createElement('button');
+            btnCancel.textContent = 'Cancelar';
+            btnCancel.style.padding = '6px 10px';
+            btnCancel.style.borderRadius = '6px';
+            btnCancel.style.border = 'none';
+            btnCancel.style.background = '#6b7280';
+            btnCancel.style.color = '#fff';
+            btnCancel.addEventListener('click', () => {
+                cancelPendingBuild();
+            });
+
+            overlay.appendChild(info);
+            overlay.appendChild(btnConfirm);
+            overlay.appendChild(btnCancel);
+            document.body.appendChild(overlay);
+        }
+
+        function removeConfirmOverlay() {
+            const old = document.getElementById('build-confirm-overlay');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+        }
+
+        function confirmPendingBuild() {
+            if (!pendingBuild) return removeConfirmOverlay();
+            // check money again
+            if (dinheiro < pendingBuild.custo) {
+                showTemporaryMessage('Dinheiro insuficiente!', window.innerWidth / 2, window.innerHeight / 2);
+                pendingBuild = null;
+                removeConfirmOverlay();
+                return;
+            }
+            dinheiro -= pendingBuild.custo;
+            const { x, y, tipo } = pendingBuild;
+            if (tipo === 'forte') torres.push(new TorreForte(x, y));
+            else if (tipo === 'gelo') torres.push(new TorreGelo(x, y));
+            else if (tipo === 'eletrica') torres.push(new TorreEletrica(x, y));
+            else torres.push(new Torre(x, y));
+            pendingBuild = null;
+            removeConfirmOverlay();
+        }
+
+        function cancelPendingBuild() {
+            pendingBuild = null;
+            removeConfirmOverlay();
+        }
+
+        // Small floating temporary message (auto-hide)
+        let _tempMsgTimeout = null;
+        function showTemporaryMessage(text, clientX, clientY) {
+            removeTempMessage();
+            const el = document.createElement('div');
+            el.id = 'temp-build-msg';
+            el.style.position = 'absolute';
+            el.style.left = clientX + 'px';
+            el.style.top = clientY + 'px';
+            el.style.transform = 'translate(-50%, 0)';
+            el.style.background = 'rgba(0,0,0,0.8)';
+            el.style.color = '#fff';
+            el.style.padding = '6px 8px';
+            el.style.borderRadius = '6px';
+            el.style.zIndex = 2100;
+            el.textContent = text;
+            document.body.appendChild(el);
+            _tempMsgTimeout = setTimeout(removeTempMessage, 1200);
+        }
+
+        function removeTempMessage() {
+            if (_tempMsgTimeout) { clearTimeout(_tempMsgTimeout); _tempMsgTimeout = null; }
+            const old = document.getElementById('temp-build-msg');
+            if (old && old.parentNode) old.parentNode.removeChild(old);
+        }
+
+        // Botões para selecionar tipo de torre
+    const btnTorreBasica = document.getElementById('btn-torre-basica');
+    const btnTorreForte = document.getElementById('btn-torre-forte');
+    const btnTorreGelo = document.getElementById('btn-torre-gelo');
+    const btnTorreEletrica = document.getElementById('btn-torre-eletrica');
+
+        function atualizarSelecaoBotao() {
+            // Reset estilos
+            btnTorreBasica.style.background = '';
+            btnTorreBasica.style.color = '';
+            btnTorreForte.style.background = '';
+            btnTorreForte.style.color = '';
+            btnTorreGelo.style.background = '';
+            btnTorreGelo.style.color = '';
+            if (btnTorreEletrica) { btnTorreEletrica.style.background = ''; btnTorreEletrica.style.color = ''; }
+
+            if (tipoTorreSelecionada === 'basica') {
+                btnTorreBasica.style.background = '#4CAF50';
+                btnTorreBasica.style.color = '#fff';
+            } else if (tipoTorreSelecionada === 'forte') {
+                btnTorreForte.style.background = '#4CAF50';
+                btnTorreForte.style.color = '#fff';
+            } else if (tipoTorreSelecionada === 'gelo') {
+                btnTorreGelo.style.background = '#4CAF50';
+                btnTorreGelo.style.color = '#fff';
+            } else if (tipoTorreSelecionada === 'eletrica') {
+                if (btnTorreEletrica) { btnTorreEletrica.style.background = '#4CAF50'; btnTorreEletrica.style.color = '#fff'; }
+            }
+        }
+
+        btnTorreBasica.addEventListener('click', () => {
+            tipoTorreSelecionada = 'basica';
+            sellMode = false;
+            atualizarSelecaoBotao();
+        });
+
+        btnTorreForte.addEventListener('click', () => {
+            tipoTorreSelecionada = 'forte';
+            atualizarSelecaoBotao();
+        });
+
+        btnTorreGelo.addEventListener('click', () => {
+            tipoTorreSelecionada = 'gelo';
+            sellMode = false;
+            atualizarSelecaoBotao();
+        });
+
+        if (btnTorreEletrica) {
+            btnTorreEletrica.addEventListener('click', () => {
+                if (btnTorreEletrica.disabled) return;
+                tipoTorreSelecionada = 'eletrica';
+                sellMode = false;
+                atualizarSelecaoBotao();
+            });
+            btnTorreEletrica.addEventListener('mouseenter', (e) => showTooltipFor('eletrica', btnTorreEletrica, e));
+            btnTorreEletrica.addEventListener('mouseleave', hideTooltip);
+        }
+
+        atualizarSelecaoBotao();
+
+        const btnVender = document.getElementById('btn-vender-torre');
+        btnVender.addEventListener('click', () => {
+            sellMode = !sellMode;
+            // feedback visual simples
+            if (sellMode) {
+                btnVender.style.background = '#b91c1c';
+            } else {
+                btnVender.style.background = '#444';
+            }
+            // reset selection visuals
+            atualizarSelecaoBotao();
+        });
+
+        const eventoEl = document.getElementById('evento');
+        let bossAlive = false;
+
+        // Menu elements
+        const mainMenu = document.getElementById('main-menu');
+        const btnStart = document.getElementById('btn-start');
+        const btnContinue = document.getElementById('btn-continue');
+
+        btnStart.addEventListener('click', () => {
+            gameStarted = true;
+            if (mainMenu && mainMenu.parentNode) mainMenu.parentNode.removeChild(mainMenu);
+            // Start first wave explicitly
+            criarOnda();
+        });
+
+        // Debug / quick continue: starts game but gives extra money for playtesting
+        btnContinue.addEventListener('click', () => {
+            gameStarted = true;
+            dinheiro += 1300;
+            numeroOnda += 2; // jump a bit ahead
+            if (eventoEl) eventoEl.textContent = 'Modo Debug: Dinheiro extra concedido!';
+            if (mainMenu && mainMenu.parentNode) mainMenu.parentNode.removeChild(mainMenu);
+            criarOnda();
+        });
+
+
+        // Tooltip
+        const tooltip = document.getElementById('tooltip');
+
+        const stats = {
+            basica: {
+                nome: 'Torre Básica',
+                preco: precoTorre,
+                dano: 100,
+                alcance: 120,
+                taxa: '80 frames'
+            },
+            forte: {
+                nome: 'Torre Forte',
+                preco: precoTorreForte,
+                dano: 250,
+                alcance: 150,
+                taxa: '110 frames'
+            },
+            gelo: {
+                nome: 'Torre Gelo',
+                preco: precoTorreForte,
+                dano: 100,
+                alcance: 130,
+                taxa: '90 frames',
+                efeito: 'Slow 50% por ~2s'
+            }
+            ,
+            eletrica: {
+                nome: 'Torre Elétrica',
+                preco: precoTorreForte,
+                dano: 100,
+                alcance: 140,
+                taxa: '120 frames',
+                efeito: 'Atira em até 3 alvos simultaneamente'
+            }
+        };
+
+        function showTooltipFor(key, targetEl, event) {
+            const s = stats[key];
+            let html = `<strong>${s.nome}</strong><br>`;
+            html += `Preço: $${s.preco}<br>`;
+            html += `Dano: ${s.dano}<br>`;
+            html += `Alcance: ${s.alcance}<br>`;
+            html += `Taxa: ${s.taxa}<br>`;
+            if (s.efeito) html += `${s.efeito}<br>`;
+            tooltip.innerHTML = html;
+            tooltip.style.display = 'block';
+            // Posicionar próximo ao botão
+            const rect = targetEl.getBoundingClientRect();
+            const top = rect.bottom + window.scrollY + 6;
+            const left = rect.left + window.scrollX;
+            tooltip.style.top = `${top}px`;
+            tooltip.style.left = `${left}px`;
+        }
+
+        function hideTooltip() {
+            tooltip.style.display = 'none';
+        }
+
+        btnTorreBasica.addEventListener('mouseenter', (e) => showTooltipFor('basica', btnTorreBasica, e));
+        btnTorreBasica.addEventListener('mouseleave', hideTooltip);
+        btnTorreForte.addEventListener('mouseenter', (e) => showTooltipFor('forte', btnTorreForte, e));
+        btnTorreForte.addEventListener('mouseleave', hideTooltip);
+        btnTorreGelo.addEventListener('mouseenter', (e) => showTooltipFor('gelo', btnTorreGelo, e));
+        btnTorreGelo.addEventListener('mouseleave', hideTooltip);
+
+        // --- GAME LOOP PRINCIPAL ---
+        function gameLoop() {
+            if (jogoAcabou) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'red';
+                ctx.font = '60px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('FIM DE JOGO', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            desenharCaminho();
+            atualizarUI();
+
+            // Atualizar Torres
+            torres.forEach(torre => torre.update());
+
+            // Desenhar ghost/preview para build pendente (em mobile)
+            if (pendingBuild) {
+                const gX = pendingBuild.x;
+                const gY = pendingBuild.y;
+                // cor e estilo por tipo
+                ctx.save();
+                ctx.globalAlpha = 0.7;
+                if (pendingBuild.tipo === 'forte') {
+                    const g = ctx.createLinearGradient(gX - 18, gY - 18, gX + 18, gY + 18);
+                    g.addColorStop(0, '#8b5cf6');
+                    g.addColorStop(1, '#4c1d95');
+                    ctx.fillStyle = g;
+                    ctx.fillRect(gX - 18, gY - 18, 36, 36);
+                } else if (pendingBuild.tipo === 'gelo') {
+                    const g = ctx.createLinearGradient(gX - 16, gY - 16, gX + 16, gY + 16);
+                    g.addColorStop(0, '#7dd3fc');
+                    g.addColorStop(1, '#0369a1');
+                    ctx.fillStyle = g;
+                    ctx.fillRect(gX - 16, gY - 16, 32, 32);
+                } else {
+                    const g = ctx.createLinearGradient(gX - 15, gY - 15, gX + 15, gY + 15);
+                    g.addColorStop(0, '#3b82f6');
+                    g.addColorStop(1, '#1e3a8a');
+                    ctx.fillStyle = g;
+                    ctx.fillRect(gX - 15, gY - 15, 30, 30);
+                }
+                // alcance
+                ctx.beginPath();
+                const alcance = (pendingBuild.tipo === 'forte') ? 150 : (pendingBuild.tipo === 'gelo' ? 130 : (pendingBuild.tipo === 'eletrica' ? 140 : 120));
+                ctx.arc(gX, gY, alcance, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.04)';
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // Atualizar Inimigos
+            inimigos.forEach((inimigo, index) => {
+                inimigo.update();
+                if (inimigo.vida <= 0) {
+                    dinheiro += inimigo.recompensa;
+                    // Se era boss, limpar estado de boss e avançar de nível quando aplicável
+                    if (inimigo.tipo === 'boss') {
+                        bossAlive = false;
+                        if (eventoEl) eventoEl.textContent = '';
+                        try {
+                            const cur = currentLevelIndex;
+                            const next = cur + 1;
+                            if (next < levels.length) {
+                                // desbloqueia o próximo nível
+                                unlockNextLevelIfAny(cur);
+                                // mostra overlay de vitória entre níveis
+                                showVictoryOverlay(cur, next);
+                            } else {
+                                // último nível: apenas mostrar vitória final
+                                showVictoryOverlay(cur, null);
+                            }
+                        } catch (e) { console.error(e); }
+                    }
+                    removerInimigo(inimigo);
+                }
+            });
+            
+            // Atualizar Projéteis
+            for (let i = projeteis.length - 1; i >= 0; i--) {
+                const projetil = projeteis[i];
+                projetil.draw();
+                if (projetil.update()) {
+                    projeteis.splice(i, 1); // Remove projétil ao atingir o alvo
+                }
+            }
+
+            // Atualizar partículas
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.08; // gravidade suave
+                p.life -= 1;
+                ctx.globalAlpha = Math.max(0, p.life / 40);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            
+            // Verificar condição de fim de jogo
+            if (vidas <= 0) {
+                jogoAcabou = true;
+            }
+            
+            // Iniciar próxima onda somente se o jogo foi iniciado via menu
+            if (gameStarted && inimigos.length === 0 && inimigosAtivos === 0) {
+                const lvl = levels[currentLevelIndex];
+                if (lvl && wavesLaunchedThisLevel >= lvl.maxWaves) {
+                    // nivel completo - mostrar botão de próximo nível se houver
+                    const btnNextLevel = document.getElementById('btn-next-level');
+                    if (currentLevelIndex < levels.length - 1) {
+                        btnNextLevel.style.display = 'block';
+                        // unlock the next level for the selector
+                        try { unlockNextLevelIfAny(currentLevelIndex); } catch (e) { /* ignore */ }
+                    } else {
+                        btnNextLevel.style.display = 'none';
+                    }
+                } else {
+                    criarOnda();
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Iniciar o jogo
+        // Next level button
+        const btnNextLevel = document.getElementById('btn-next-level');
+        btnNextLevel.addEventListener('click', () => {
+            const next = currentLevelIndex + 1;
+            if (next < levels.length) {
+                loadLevel(next);
+                btnNextLevel.style.display = 'none';
+            }
+        });
+
+        // Load initial level (but don't start waves until menu Start pressed)
+        loadLevel(0);
+
+        gameLoop();
+
+        // --- LEVEL SELECTOR UI / PERSISTENCE ---
+        const levelSelector = document.getElementById('level-selector');
+        const levelGrid = document.getElementById('level-grid');
+        const btnOpenLevels = document.getElementById('btn-open-levels');
+        const btnCloseLevels = document.getElementById('btn-close-levels');
+
+        // Local storage key to keep unlocked levels
+        const LS_KEY_UNLOCK = 'sd_unlocked_levels_v1';
+
+        function getUnlockedLevels() {
+            try {
+                const raw = localStorage.getItem(LS_KEY_UNLOCK);
+                if (!raw) return [0]; // default: first level unlocked
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed;
+            } catch (e) { }
+            return [0];
+        }
+
+        function saveUnlockedLevels(arr) {
+            try { localStorage.setItem(LS_KEY_UNLOCK, JSON.stringify(arr)); } catch (e) { }
+        }
+
+        function isUnlocked(index) {
+            const unlocked = getUnlockedLevels();
+            return unlocked.includes(index);
+        }
+
+        function unlockLevel(index) {
+            const unlocked = getUnlockedLevels();
+            if (!unlocked.includes(index)) {
+                unlocked.push(index);
+                saveUnlockedLevels(unlocked);
+            }
+        }
+
+        // Render the grid of levels
+        function renderLevelGrid() {
+            levelGrid.innerHTML = '';
+            for (let i = 0; i < levels.length; i++) {
+                const lvl = levels[i];
+                const card = document.createElement('button');
+                card.className = 'level-card';
+                card.type = 'button';
+                card.setAttribute('data-idx', String(i));
+                card.setAttribute('aria-label', `Nivel ${i+1} - ${lvl.name}`);
+
+                const thumb = document.createElement('div');
+                thumb.className = 'thumb';
+                thumb.textContent = String(i+1);
+
+                const meta = document.createElement('div');
+                const nameEl = document.createElement('div');
+                nameEl.className = 'lvl-name';
+                nameEl.textContent = lvl.name || `Nível ${i+1}`;
+                const infoEl = document.createElement('div');
+                infoEl.className = 'meta';
+                infoEl.textContent = `Dinheiro inicial: $${lvl.startingMoney} • Ondas: ${lvl.maxWaves}`;
+
+                meta.appendChild(nameEl);
+                meta.appendChild(infoEl);
+
+                card.appendChild(thumb);
+                card.appendChild(meta);
+
+                if (!isUnlocked(i)) {
+                    card.setAttribute('disabled', '');
+                    const lock = document.createElement('div');
+                    lock.className = 'locked-overlay';
+                    lock.textContent = 'Bloqueado';
+                    card.appendChild(lock);
+                }
+
+                card.addEventListener('click', () => {
+                    if (!isUnlocked(i)) return;
+                    // If a game is running and user chooses a different level, reset and load
+                    loadLevel(i);
+                    // Expose callback for game integration
+                    if (typeof window.onLevelSelected === 'function') {
+                        try { window.onLevelSelected(i); } catch (e) { console.error(e); }
+                    }
+                    closeLevelSelector();
+                });
+
+                levelGrid.appendChild(card);
+            }
+        }
+
+        function openLevelSelector() {
+            renderLevelGrid();
+            levelSelector.style.display = 'flex';
+            // trap focus simple
+            const focusable = levelSelector.querySelectorAll('button');
+            if (focusable.length) focusable[0].focus();
+        }
+
+        function closeLevelSelector() {
+            levelSelector.style.display = 'none';
+            // return focus to menu button if present
+            if (btnOpenLevels) btnOpenLevels.focus();
+        }
+
+        btnOpenLevels.addEventListener('click', () => openLevelSelector());
+        btnCloseLevels.addEventListener('click', () => closeLevelSelector());
+
+        // Close when clicking outside content
+        levelSelector.addEventListener('click', (ev) => {
+            if (ev.target === levelSelector) closeLevelSelector();
+        });
+
+        // Close with ESC
+        window.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Escape' || ev.key === 'Esc') {
+                if (levelSelector.style.display === 'flex') closeLevelSelector();
+            }
+        });
+
+        // Expose helper to unlock next level (call this after level completion)
+        function unlockNextLevelIfAny(currentIdx) {
+            const next = currentIdx + 1;
+            if (next < levels.length) unlockLevel(next);
+        }
+
+        // Basic integration: when all waves of current level are complete, unlock next
+        // Observe wavesLaunchedThisLevel / inimigos / inimigosAtivos inside game loop conditions
+        const originalCreateWave = criarOnda;
+        // We don't override criarOnda; instead, hook into btnNextLevel logic and game progression
+
+        // Provide a public API so other scripts can unlock levels or select a level programmatically
+        window.levelsAPI = {
+            isUnlocked, unlockLevel, getUnlockedLevels, openLevelSelector, closeLevelSelector
+        };
+
+        // Optional callback stub for integration
+        window.onLevelSelected = window.onLevelSelected || null;
+
+        // --- Victory overlay functions ---
+        const victoryOverlay = document.getElementById('victory-overlay');
+        const victoryTitle = document.getElementById('victory-title');
+        const victoryMsg = document.getElementById('victory-msg');
+        const victoryContinue = document.getElementById('victory-continue');
+        const victoryClose = document.getElementById('victory-close');
+
+        let _pendingNextLevel = null;
+
+        function showVictoryOverlay(currentIdx, nextIdx) {
+            _pendingNextLevel = nextIdx;
+            if (nextIdx === null) {
+                victoryTitle.textContent = 'Você venceu o jogo!';
+                victoryMsg.textContent = 'Parabéns — você derrotou o chefe final.';
+                victoryContinue.style.display = 'none';
+            } else {
+                victoryTitle.textContent = 'Nível Concluído!';
+                const name = (levels[currentIdx] && levels[currentIdx].name) ? levels[currentIdx].name : `Nível ${currentIdx+1}`;
+                victoryMsg.textContent = `Você completou ${name}. Pronto para o próximo desafio?`;
+                victoryContinue.style.display = '';
+            }
+            victoryOverlay.style.display = 'flex';
+        }
+
+        function hideVictoryOverlay() {
+            victoryOverlay.style.display = 'none';
+            _pendingNextLevel = null;
+        }
+
+        victoryContinue.addEventListener('click', () => {
+            if (_pendingNextLevel != null) {
+                try {
+                    loadLevel(_pendingNextLevel);
+                    // fechar overlay
+                    hideVictoryOverlay();
+                } catch (e) { console.error(e); }
+            } else {
+                hideVictoryOverlay();
+            }
+        });
+
+        victoryClose.addEventListener('click', () => {
+            // apenas fecha o overlay, permitindo ao jogador escolher manualmente no seletor
+            hideVictoryOverlay();
+            // abrir o seletor de níveis para que o jogador possa ver/desligar o próximo nível
+            openLevelSelector();
+        });
+
+
+    </script>
+</body>
+</html>

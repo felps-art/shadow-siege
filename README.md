@@ -17,11 +17,17 @@ Explorar → Coletar recursos → Posicionar torres / preparar defesa → Enfren
 - `docs/TASKS.md`: Roadmap incremental por fases.
 
 ## Próximos Passos (Prioridade)
-1. Criar `obj_controller` e estado global de jogo.
-2. Adicionar `obj_nexus` (HP + perda de jogo).
+1. (Feito) Criar `obj_controller` e estado global de jogo. ✅
+2. (Feito) Adicionar `obj_nexus` (HP + perda de jogo). ✅
 3. Unificar disparo em `scr_fire_bullet` e refatorar torre/player.
-4. Implementar spawner simples de waves.
+4. Implementar spawner simples de waves (substituir lógica placeholder atual no controller).
 5. Arpéu stub + blueprint Tesla.
+
+### Notas sobre o `obj_controller`
+Estrutura inicial criada com `global.game` contendo: `state`, `wave`, `enemies_alive`, `waves_total`, `waves_spawned`, temporizadores e FSM simples (BUILD → COMBAT → BUILD / VICTORY). O spawn atual é placeholder e deve ser migrado para um sistema de *wave definition* configurável.
+
+### Notas sobre o `obj_nexus`
+Objeto central com `hp` e `hp_max` (placeholder visual). Inimigos agora priorizam o jogador, mas recaem para atacar o nexus se o player não existir. O controller detecta `hp <= 0` e muda para `GAME_STATE_DEFEAT`. Próximos incrementos: dano escalável, upgrades defensivos e animação de destruição.
 
 ## Tecnologias / Engine
 - GameMaker (GML) – foco em objetos modulares e scripts reutilizáveis.
