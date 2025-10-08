@@ -27,7 +27,10 @@ image_angle = point_direction(x, y, mouse_x, mouse_y);
 // Atirar com o botão esquerdo do mouse
 if (mouse_check_button_pressed(mb_left)) {
     // Cria uma instância da bala
-    var _bullet = instance_create_layer(x, y, "Instances", obj_bullet);
+    // Layer safe acquisition (inline to avoid missing script resource)
+    var _inst_layer = "Instances";
+    if (!layer_exists(_inst_layer)) { layer_create(-1, _inst_layer); }
+    var _bullet = instance_create_layer(x, y, _inst_layer, obj_bullet);
     // Define a direção e velocidade da bala
     _bullet.direction = image_angle;
     _bullet.speed = 10;
@@ -57,7 +60,9 @@ if (keyboard_check_pressed(ord("E"))) {
     }
     else {
         // Cria a torre, debita custo e inicia cooldown
-        instance_create_layer(x, y, "Instances", obj_tower);
+    var _layer2 = "Instances";
+    if (!layer_exists(_layer2)) { layer_create(-1, _layer2); }
+    instance_create_layer(x, y, _layer2, obj_tower);
         gold -= tower_cost;
         tower_cooldown_timer = tower_cooldown;
         // feedback: torre construída (HUD atualizará gold)

@@ -1,5 +1,6 @@
 // ui.js - Funções de interface: tooltips, menus, seletor de níveis, vitória, etc.
 import { levels } from './levels.js';
+import { events } from './event-bus.js';
 
 const LS_KEY_UNLOCK = 'sd_unlocked_levels_v1';
 
@@ -42,6 +43,22 @@ export function updateHUD(elements, state){
   elements.dinheiroEl.textContent = `Dinheiro: $${state.dinheiro}`;
   elements.vidasEl.textContent = `Vidas: ${state.vidas}`;
   elements.ondaEl.textContent = `Onda: ${state.numeroOnda}`;
+}
+
+// Listeners de UI desacoplados (exemplos)
+if (typeof window !== 'undefined') {
+  events.on('bossSpawned', ({ wave }) => {
+    const el = document.getElementById('evento'); if (el) el.textContent = 'CHEFE apareceu (onda '+wave+')';
+  });
+  events.on('bossDefeated', ({ wave }) => {
+    const el = document.getElementById('evento'); if (el) el.textContent = '';
+  });
+  events.on('enemyKilled', ({ type, reward }) => {
+    // Debug: poderia acumular métricas ou um pequeno flash; manter leve.
+    if (window.__TD_DEBUG_METRICS__) {
+      window.__TD_DEBUG_METRICS__.kills = (window.__TD_DEBUG_METRICS__.kills||0)+1;
+    }
+  });
 }
 
 export function tooltipShow(elements, content, target){

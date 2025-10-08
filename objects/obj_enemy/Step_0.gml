@@ -1,7 +1,9 @@
-// --- obj_enemy | Step Event ---
+// --- obj_enemy | Step Event (refactor) ---
 
-// Se a vida chegar a zero, dá recompensa ao jogador (se existir) e destrói o inimigo
-if (hp <= 0) {
+// 1. Morte
+if (!is_dying && hp <= 0) {
+    is_dying = true;
+    // Recompensa
     if (instance_exists(obj_player)) {
         var _p = instance_find(obj_player, 0);
         if (_p != noone && variable_instance_exists(_p, "gold")) {
@@ -9,154 +11,146 @@ if (hp <= 0) {
         }
     }
     instance_destroy();
-    exit; // garante que nada mais rode
+    exit;
 }
 
-// Atualiza timers
-if (attack_timer > 0) attack_timer -= 1;
+// 2. Timers
+if (attack_timer > 0) attack_timer--;
+if (hit_flash_timer > 0) hit_flash_timer--;
 
-// --- Seleção de alvo (player prioritário dentro do aggro; caso contrário nexus) ---
-var target_inst = noone;
-var target_type = -1; // 0 = player, 1 = nexus
-var target_player = noone;
-var target_nexus = noone;
-var dist_to_player = 999999;
-var dist_to_nexus = 999999;
+// 3. Aquisição de alvo (player > nexus)
+target_id = noone;
+target_kind = -1;
 
+var _player = noone;
 if (instance_exists(obj_player)) {
-    // Caso haja múltiplos jogadores no futuro, pegar o mais próximo
-    target_player = instance_nearest(x, y, obj_player);
-    dist_to_player = point_distance(x, y, target_player.x, target_player.y);
-}
-if (instance_exists(obj_nexus)) {
-    target_nexus = instance_nearest(x, y, obj_nexus); // normalmente 1
-    dist_to_nexus = point_distance(x, y, target_nexus.x, target_nexus.y);
-}
-
-if (target_player != noone && dist_to_player <= aggro_range) {
-    target_inst = target_player;
-    target_type = 0;
-} else if (target_nexus != noone) {
-    target_inst = target_nexus;
-    target_type = 1;
-}
-
-if (target_inst == noone) {
-    // Sem alvo -> patrulha
-    state = 0;
-} else {
-    var px = target_inst.x;
-    var py = target_inst.y;
-    var dist_to_target = point_distance(x, y, px, py);
-
-    // Transições de estado
-    switch (state) {
-        case 0: // Patrol (ou transição imediata para nexus se for o alvo)
-        {
-            // Se o alvo é o nexus, não ficar patrulhando: ir direto perseguir
-            if (target_type == 1) { state = 1; break; }
-            // Incrementa tempo de patrulha
-            patrol_time += 1;
-            patrol_retarget_timer += 1;
-
-            // Se jogador é alvo e está dentro do alcance de ataque, pode quebrar a patrulha imediatamente
-            if (target_type == 0 && dist_to_target <= attack_range) { state = 1; patrol_time = 0; break; }
-            // Caso contrário só persegue se tempo mínimo já passou E está no aggro
-            if (target_type == 0 && patrol_time >= patrol_min_time && dist_to_target <= aggro_range) { state = 1; patrol_time = 0; break; }
-
-            // Se não há um target de patrulha definido ou chegou, escolhe novo ponto
-            if (point_distance(x, y, patrol_target_x, patrol_target_y) < 4) {
-                var angle = irandom_range(0, 359);
-                patrol_target_x = patrol_center_x + lengthdir_x(irandom_range(16, patrol_radius), angle);
-                patrol_target_y = patrol_center_y + lengthdir_y(irandom_range(16, patrol_radius), angle);
-                patrol_retarget_timer = 0;
-            }
-
-            // Retarget forçado se demorou demais sem chegar
-            if (patrol_retarget_timer >= patrol_retarget_interval) {
-                patrol_retarget_timer = 0;
-                var angle2 = irandom_range(0, 359);
-                patrol_target_x = patrol_center_x + lengthdir_x(irandom_range(16, patrol_radius), angle2);
-                patrol_target_y = patrol_center_y + lengthdir_y(irandom_range(16, patrol_radius), angle2);
-            }
-
-            // Move em direção ao ponto de patrulha
-            move_towards_point(patrol_target_x, patrol_target_y, speed);
-            break;
+    _player = instance_nearest(x, y, obj_player);
+    if (_player != noone) {
+    var dxp = _player.x - x; var dyp = _player.y - y; var d2p = dxp*dxp + dyp*dyp;
+    if (d2p <= aggro_range * aggro_range) {
+            target_id = _player; target_kind = 0;
         }
-        case 1: // Chase (player ou nexus)
-        {
-            // Só aplicável se alvo é jogador: saiu do aggro -> volta a patrulhar
-            if (target_type == 0 && dist_to_target > aggro_range * 1.2) { state = 0; patrol_time = 0; break; }
+    }
+}
+if (target_id == noone) {
+    var _nexus_index = asset_get_index("obj_nexus");
+    if (_nexus_index != -1 && instance_exists(_nexus_index)) {
+        var _nx = instance_nearest(x, y, _nexus_index);
+        if (_nx != noone) { target_id = _nx; target_kind = 1; }
+    }
+}
 
-            // Se dentro do range de ataque
-            if (dist_to_target <= attack_range) { state = 2; break; }
+// 4. FSM
+// Pré-calcula distância ao alvo se existir
+// Valores sentinela grandes (evita possível problema de parser com notação científica em algumas builds)
+var dist2_target = 1000000000; // ~1e9
+var dist_target = 1000000000;
+var tx, ty;
+if (target_id != noone) {
+    tx = target_id.x; ty = target_id.y;
+    var dx = tx - x; var dy = ty - y;
+    dist2_target = dx*dx + dy*dy;
+    // Só converte para raiz quando necessário (ataque)
+    if (dist2_target < 262144) dist_target = sqrt(dist2_target); // sqrt só se n<512 px
+}
 
-            // Persegue alvo atual (player ou nexus)
-            move_towards_point(px, py, speed);
-            break;
+switch (state) {
+    case 0: // PATROL
+    {
+        patrol_time++;
+        patrol_retarget_timer++;
+        // Retarget ou chegou
+        if (point_distance(x, y, patrol_target_x, patrol_target_y) < 6 || patrol_retarget_timer >= patrol_retarget_interval) {
+            patrol_retarget_timer = 0;
+            var ang = irandom_range(0, 359);
+            patrol_target_x = patrol_center_x + lengthdir_x(irandom_range(16, patrol_radius), ang);
+            patrol_target_y = patrol_center_y + lengthdir_y(irandom_range(16, patrol_radius), ang);
         }
-        case 2: // Attack
-        {
-            // Se alvo saiu do alcance de ataque, volta para chase
-            if (dist_to_target > attack_range) { state = 1; break; }
-
-            // Tenta atacar somente se cooldown zerado
-            if (attack_timer <= 0) {
-                // Aplica dano a qualquer alvo com HP (player ou nexus)
-                if (target_inst != noone && variable_instance_exists(target_inst, "hp")) {
-                    target_inst.hp -= damage;
-                    // Knockback somente em player
-                    if (target_type == 0) {
-                        var kb_dir = point_direction(x, y, target_inst.x, target_inst.y);
-                        target_inst.x += lengthdir_x(knockback_force, kb_dir);
-                        target_inst.y += lengthdir_y(knockback_force, kb_dir);
-                    }
+        // Move
+        move_towards_point(patrol_target_x, patrol_target_y, speed);
+        // Transição para chase
+        if (target_id != noone && (target_kind == 1 || dist2_target <= aggro_range * aggro_range)) {
+            if (target_kind == 0 && patrol_time < patrol_min_time && dist2_target > attack_range * attack_range) {
+                // respeita tempo mínimo se player longe do ataque
+            } else {
+                state = 1; patrol_time = 0;
+            }
+        }
+        break;
+    }
+    case 1: // CHASE
+    {
+        if (target_id == noone) { state = 0; break; }
+        move_towards_point(tx, ty, speed);
+        // Player saiu do aggro (só para player)
+    var _agg_out = aggro_range * 1.25; if (target_kind == 0 && dist2_target > _agg_out * _agg_out) { state = 0; patrol_time = 0; break; }
+        // Entrou no range de ataque
+    if (dist2_target <= attack_range * attack_range) { state = 2; }
+        break;
+    }
+    case 2: // ATTACK
+    {
+        if (target_id == noone) { state = 0; break; }
+    var _atk_out = attack_range * 1.15; if (dist2_target > _atk_out * _atk_out) { state = 1; break; }
+        if (attack_timer <= 0) {
+            if (variable_instance_exists(target_id, "hp")) {
+                target_id.hp -= damage;
+                if (target_kind == 0) {
+                    var kdir = point_direction(x, y, target_id.x, target_id.y);
+                    target_id.x += lengthdir_x(knockback_force, kdir);
+                    target_id.y += lengthdir_y(knockback_force, kdir);
                 }
-                attack_timer = attack_cooldown;
             }
+            attack_timer = attack_cooldown;
+        }
+        break;
+    }
+}
 
-            break;
+// 5. Separação simples (executa a cada separation_interval frames) — robusta sem with()
+if (separation_enabled) {
+    separation_timer++;
+    if (separation_timer >= separation_interval) {
+        separation_timer = 0;
+        var cnt = instance_number(obj_enemy);
+        if (cnt > 1) {
+            push_x = 0; push_y = 0;
+            // Coleta ids via instance_find (compatível) evitando dependência de instance_first/next
+            var list = ds_list_create();
+            var idx = 0;
+            while (true) {
+                var inst = instance_find(obj_enemy, idx);
+                if (inst == noone) break;
+                ds_list_add(list, inst);
+                idx++;
+            }
+            // Itera e acumula forças
+            var my_sep_r2 = separation_radius * separation_radius;
+            for (var i = 0; i < ds_list_size(list); i++) {
+                var e = list[| i];
+                if (e == id || !instance_exists(e)) continue;
+                var dxs = e.x - x; var dys = e.y - y;
+                var d2 = dxs*dxs + dys*dys;
+                if (d2 > 0 && d2 < my_sep_r2) {
+                    var d = sqrt(d2);
+                    var f = (1 - (d / separation_radius)) * separation_strength;
+                    push_x += (dxs / d) * f;
+                    push_y += (dys / d) * f;
+                }
+            }
+            ds_list_destroy(list);
+            var mag = point_distance(0, 0, push_x, push_y);
+            if (mag > 0) {
+                var maxp = separation_max_push; if (state == 2) maxp *= 0.4;
+                var s = min(maxp, mag) / mag;
+                x += push_x * s;
+                y += push_y * s;
+            }
         }
     }
 }
 
-// --- Separação / Evitar sobreposição entre inimigos ---
-// Incremento do timer sem operador 'mod' (compatibilidade)
-if (separation_interval > 1) {
-    separation_timer += 1;
-    if (separation_timer >= separation_interval) separation_timer = 0;
-} else {
-    separation_timer = 0;
-}
-
-if (separation_timer == 0) {
-    if (instance_number(obj_enemy) > 1) {
-        // Zera acumuladores desta instância
-        push_x = 0;
-        push_y = 0;
-        // Percorre outras instâncias e calcula força afastando do centro de cada uma
-        with (obj_enemy) {
-            if (id != other.id) {
-                var dx = other.x - x;
-                var dy = other.y - y;
-                var dist = point_distance(other.x, other.y, x, y);
-                if (dist > 0 && dist < other.separation_radius) {
-                    var f = (1 - (dist / other.separation_radius)) * other.separation_strength;
-                    // Direção normalizada afastando (invertida relative ao outro)
-                    other.push_x += (dx / dist) * f;
-                    other.push_y += (dy / dist) * f;
-                }
-            }
-        }
-        var mag = point_distance(0, 0, push_x, push_y);
-        if (mag > 0) {
-            var max_push_local = separation_max_push;
-            // Enquanto atacando, reduzir deslocamento para não deslizar demais
-            if (state == 2) max_push_local *= 0.4;
-            var scale = min(max_push_local, mag) / mag;
-            x += push_x * scale;
-            y += push_y * scale;
-        }
-    }
-}
+// 6. Contenção room
+var _m = boundary_margin;
+if (x < _m) x = _m; else if (x > room_width - _m) x = room_width - _m;
+if (y < _m) y = _m; else if (y > room_height - _m) y = room_height - _m;
